@@ -1,23 +1,26 @@
 'use client';
 
-import { CHUNK_SIZE } from "@/app/common/chunk.constant";
+import { CHUNK_SIZE, UNICODE_CHUNK_SIZE } from '@/app/common/chunk.constant';
 import { splitStringAtParagraph } from "@/app/common/chunk.helper";
 import callGPT from "@/app/common/openai";
+import translate from '@/app/common/deepl';
 import styles from "@/app/styles/Home.module.css";
 import { Analytics } from '@vercel/analytics/react';
 import Head from "next/head";
 import { Configuration, OpenAIApi } from "openai";
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from 'react';
 import sequence from "./common/sequence";
 import Typewriter from "./components/TypeWriter";
 
 export default function Home() {
   const [requestInput, setRequestInput] = useState("Summarize the text below");
   const [textInput, setTextInput] = useState("");
-  const [result, setResult] = useState([]);
+  const [result, setResult] = useState([] as string[]);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [chunks, setChunks] = useState("");
+  const [chunks, setChunks] = useState([] as string[]);
+  const [useTranslate, setUseTranslate] = useState(false);
+  const [lang, setLang] = useState('');
 
   // Get the openai api key from the local storage
   const [openaiAPIKey, setOpenAIAPIKey] = useState("");
@@ -48,12 +51,16 @@ export default function Home() {
    * The OpenAI API uses the text sent as input and the request to generate a new text.
    * The API server then returns the generated text to this function.
    * The function return the generated text.
-   * @param {*} chunk 
-   * @param {*} openaiAPIKey 
-   * @param {*} requestInput 
-   * @returns 
+   * @param {*} chunk
+   * @param {*} openaiAPIKey
+   * @param {*} requestInput
+   * @returns
    */
-  async function processChunk(chunk, openaiAPIKey, requestInput) {
+  async function processChunk(
+    chunk: string,
+    openaiAPIKey: string,
+    requestInput: string,
+  ) {
 
     const configuration = new Configuration({
       apiKey: openaiAPIKey,
@@ -70,9 +77,9 @@ export default function Home() {
    * This function is called when the user clicks the submit button.
    * It calls the processChunk function in sequence for each chunk of the text.
    * It then sets the result state to the generated text.
-   * @param {*} event 
+   * @param {*} event
    */
-  async function onSubmit(event) {
+  async function onSubmit(event: FormEvent) {
     event.preventDefault();
     try {
 
@@ -80,21 +87,39 @@ export default function Home() {
 
       setResult([]);
 
-      await sequence(chunks, (chunk, index) => {
+      let textChunks = chunks.slice();
+      if (useTranslate) {
+        const translated = await translate(textInput);
+        console.log('translated:', translated);
+        textChunks = splitStringAtParagraph(translated.text, CHUNK_SIZE);
+        setLang(translated.lang === 'en' ? '' : translated.lang);
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
+      await sequence(textChunks, (chunk, index) => {
         scrollToBottom();
         setProgress(Math.round(((index - 1) / chunks.length) * 100));
         console.log(`Processing chunk: ${index} of ${chunks.length}`);
 
-        return processChunk(chunk, openaiAPIKey, requestInput).then((res) => {
-          setResult((prevResult) => [...prevResult, res]);
-        }).finally(() => {
-          return result;
-        });
+        return processChunk(chunk, openaiAPIKey, requestInput)
+          .then(async (resRaw) => {
+            let res = resRaw;
+            if (useTranslate && lang) {
+              const translated = await translate(res, lang);
+              res = translated.text;
+            }
+
+            setResult((prevResult) => [...prevResult, res]);
+            return res;
+          })
+          .finally(() => {
+            return result;
+          });
       });
     } catch (error) {
       // Consider implementing your own error handling logic here
       console.error(error);
-      alert(error.message);
+      alert((error as Error).message);
     } finally {
       setProcessing(false);
     }
@@ -104,9 +129,9 @@ export default function Home() {
    * This function is called when the user enters a new API key.
    * It sets the openAIAPIKey state to the new key.
    * It also stores the key in the local storage.
-   * @param {*} key 
+   * @param {*} key
    */
-  const setAPIKeyAndPersist = (key) => {
+  const setAPIKeyAndPersist = (key: string) => {
     setOpenAIAPIKey(key);
     if (window && window.localStorage) {
       window.localStorage.setItem("openaiAPIKey", key);
@@ -117,18 +142,18 @@ export default function Home() {
    * This function is called when the user enters a new request.
    * It sets the requestInput state to the new request.
    * It also stores the request in the local storage.
-   * @param {*} request 
+   * @param {*} request
    */
-  const setRequestAndPersist = (request) => {
+  const setRequestAndPersist = (request: string) => {
     setRequestInput(request);
     if (window && window.localStorage) {
       window.localStorage.setItem("request", request);
     }
   };
 
-  const setTextAndChunks = (text) => {
+  const setTextAndChunks = (text: string) => {
     setTextInput(text);
-    let chunks = splitStringAtParagraph(text, CHUNK_SIZE);
+    let chunks = splitStringAtParagraph(text, useTranslate ? CHUNK_SIZE : UNICODE_CHUNK_SIZE);
     setChunks(chunks);
   };
 
@@ -162,25 +187,32 @@ export default function Home() {
             onChange={(e) => setAPIKeyAndPersist(e.target.value)}
           />
 
+          <label>
+            Use Deepl to translate&nbsp;
+            <input
+              type="checkbox"
+              checked={useTranslate}
+              onChange={(e) => setUseTranslate(e.target.checked)}
+            />
+          </label>
+
           <label>Enter your request</label>
           <textarea
-            type="text"
             name="request"
-            rows="2"
+            rows={2}
             placeholder="Enter your request"
             value={requestInput}
             onChange={(e) => setRequestAndPersist(e.target.value)}
           />
           <label>The text you want to process</label>
           <textarea
-            type="text"
             name="text"
-            rows="10"
+            rows={10}
             placeholder={`Enter your text here, there is no size limitation, the content will be split into ${CHUNK_SIZE} characters chunks. Each chunk will be processed separatly by openAI.`}
             value={textInput}
             onChange={(e) => setTextAndChunks(e.target.value)}
           />
-          {!!textInput?.length && (<div className={styles.size}>{`${textInput.length} characters - ${parseInt(textInput.length / CHUNK_SIZE) + 1} chunks to process`}</div>)}
+          {!!textInput?.length && (<div className={styles.size}>{`${textInput.length} characters - ${Math.floor(textInput.length / CHUNK_SIZE) + 1} chunks to process`}</div>)}
           {!processing && <input type="submit" value="Process your request" />}
           {processing && (
             <input
@@ -194,10 +226,10 @@ export default function Home() {
         {result && (
           <div className={styles.resultContainer}>
             {result.map((item, index) => {
-              
+
               return <>
                 <Typewriter key={`result-${index}`} text={item} />
-                {chunks.length > 1 && (<div className={styles.partLabel}>Part {index + 1}</div>)}
+                {chunks.length > 1 && (<div className={styles.partLabel} key={`result-title-${index}`}>Part {index + 1}</div>)}
               </>
             })}
           </div>
