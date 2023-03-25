@@ -1,5 +1,3 @@
-import { OpenAIApi } from "openai";
-
 /**
  * This function generates the prompt for the OpenAI API.
  * @param {*} text
@@ -28,16 +26,23 @@ function generatePrompt(
 export default async function callGPT(
   text: string,
   request: string,
-  openai: OpenAIApi,
 ) {
-  const completion = await openai.createChatCompletion({
-    model: 'gpt-3.5-turbo',
-    messages: [
-      { role: 'system', content: generatePrompt(text, request) },
-    ],
-    temperature: 0.6,
-    max_tokens: 1400,
+  const res = await fetch('/api/chatgpt', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text,
+      request,
+    }),
   });
 
-  return completion.data.choices[0].message?.content ?? '';
+  const result: {
+    result: {
+      text: string;
+    };
+  } = await res.json();
+
+  return result.result.text;
 }

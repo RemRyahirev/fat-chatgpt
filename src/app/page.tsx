@@ -7,7 +7,6 @@ import translate from '@/app/common/deepl';
 import styles from "@/app/styles/Home.module.css";
 import { Analytics } from '@vercel/analytics/react';
 import Head from "next/head";
-import { Configuration, OpenAIApi } from "openai";
 import { FormEvent, useEffect, useState } from 'react';
 import sequence from "./common/sequence";
 import Typewriter from "./components/TypeWriter";
@@ -20,24 +19,14 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [chunks, setChunks] = useState([] as string[]);
   const [useTranslate, setUseTranslate] = useState(false);
-  const [lang, setLang] = useState('');
-
-  // Get the openai api key from the local storage
-  const [openaiAPIKey, setOpenAIAPIKey] = useState("");
+  let lang = '';
 
   // This useEffect will run once when the component mounts
   // It checks if the window and local storage exist, and if so, it
-  // checks if there is an API key stored in local storage. If so, it
-  // sets the openAIAPIKey state to the value of the key. It also checks
-  // if there is an API request stored in local storage, and if so, it
+  // checks if there is an API request stored in local storage, and if so, it
   // sets the requestInput state to the value of the request.
   useEffect(() => {
     if (window && window.localStorage) {
-      const key = window.localStorage.getItem("openaiAPIKey");
-      if (key) {
-        setOpenAIAPIKey(key);
-      }
-
       const request = window.localStorage.getItem("request");
       if (request) {
         setRequestInput(request);
@@ -58,15 +47,9 @@ export default function Home() {
    */
   async function processChunk(
     chunk: string,
-    openaiAPIKey: string,
     requestInput: string,
   ) {
-
-    const configuration = new Configuration({
-      apiKey: openaiAPIKey,
-    });
-    const openai = new OpenAIApi(configuration);
-    return callGPT(chunk, requestInput, openai);
+    return callGPT(chunk, requestInput);
   }
 
   function scrollToBottom() {
@@ -92,8 +75,10 @@ export default function Home() {
         const translated = await translate(textInput);
         console.log('translated:', translated);
         textChunks = splitStringAtParagraph(translated.text, CHUNK_SIZE);
-        setLang(translated.lang === 'en' ? '' : translated.lang);
+        lang = translated.lang === 'en' ? '' : translated.lang;
         await new Promise(resolve => setTimeout(resolve, 0));
+      } else {
+        lang = '';
       }
 
       await sequence(textChunks, (chunk, index) => {
@@ -101,9 +86,13 @@ export default function Home() {
         setProgress(Math.round(((index - 1) / chunks.length) * 100));
         console.log(`Processing chunk: ${index} of ${chunks.length}`);
 
-        return processChunk(chunk, openaiAPIKey, requestInput)
+        return processChunk(chunk, requestInput)
           .then(async (resRaw) => {
             let res = resRaw;
+            console.log('chunk result', {
+              useTranslate,
+              lang,
+            });
             if (useTranslate && lang) {
               const translated = await translate(res, lang);
               res = translated.text;
@@ -124,19 +113,6 @@ export default function Home() {
       setProcessing(false);
     }
   }
-
-  /**
-   * This function is called when the user enters a new API key.
-   * It sets the openAIAPIKey state to the new key.
-   * It also stores the key in the local storage.
-   * @param {*} key
-   */
-  const setAPIKeyAndPersist = (key: string) => {
-    setOpenAIAPIKey(key);
-    if (window && window.localStorage) {
-      window.localStorage.setItem("openaiAPIKey", key);
-    }
-  };
 
   /**
    * This function is called when the user enters a new request.
@@ -178,15 +154,6 @@ export default function Home() {
         </div>
 
         <form onSubmit={onSubmit}>
-          <label>Enter your OpenAI API Key</label>
-          <input
-            type="text"
-            name="openaiAPIKey"
-            placeholder="Enter your OpenAI API Key"
-            value={openaiAPIKey}
-            onChange={(e) => setAPIKeyAndPersist(e.target.value)}
-          />
-
           <label>
             Use Deepl to translate&nbsp;
             <input
@@ -195,6 +162,7 @@ export default function Home() {
               onChange={(e) => setUseTranslate(e.target.checked)}
             />
           </label>
+          <br />
 
           <label>Enter your request</label>
           <textarea
