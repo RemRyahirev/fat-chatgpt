@@ -4,6 +4,7 @@ import { CHUNK_SIZE, UNICODE_CHUNK_SIZE } from '@/app/common/chunk.constant';
 import { splitStringAtParagraph } from "@/app/common/chunk.helper";
 import callGPT from "@/app/common/openai";
 import translate from '@/app/common/deepl';
+import { ENGINES } from '@/app/common/constants';
 import styles from "@/app/styles/Home.module.css";
 import { Analytics } from '@vercel/analytics/react';
 import Head from "next/head";
@@ -19,6 +20,7 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [chunks, setChunks] = useState([] as string[]);
   const [useTranslate, setUseTranslate] = useState(false);
+  const [engine, setEngine] = useState(ENGINES[0]);
   let lang = '';
 
   // This useEffect will run once when the component mounts
@@ -49,7 +51,7 @@ export default function Home() {
     chunk: string,
     requestInput: string,
   ) {
-    return callGPT(chunk, requestInput);
+    return callGPT(chunk, requestInput, engine);
   }
 
   function scrollToBottom() {
@@ -73,7 +75,6 @@ export default function Home() {
       let textChunks = chunks.slice();
       if (useTranslate) {
         const translated = await translate(textInput);
-        console.log('translated:', translated);
         textChunks = splitStringAtParagraph(translated.text, CHUNK_SIZE);
         lang = translated.lang === 'en' ? '' : translated.lang;
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -89,10 +90,6 @@ export default function Home() {
         return processChunk(chunk, requestInput)
           .then(async (resRaw) => {
             let res = resRaw;
-            console.log('chunk result', {
-              useTranslate,
-              lang,
-            });
             if (useTranslate && lang) {
               const translated = await translate(res, lang);
               res = translated.text;
@@ -154,6 +151,15 @@ export default function Home() {
         </div>
 
         <form onSubmit={onSubmit}>
+          <label>Model</label>
+          <select
+            onChange={(e) => setEngine(e.target.value)}
+          >
+            {ENGINES.map(eng => (
+              <option key={eng} value={eng} selected={eng === engine}>{eng}</option>
+            ))}
+          </select>
+
           <label>
             Use Deepl to translate&nbsp;
             <input

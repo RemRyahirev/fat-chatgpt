@@ -18,14 +18,15 @@ function generatePrompt(
 
 /**
  * This function calls the OpenAI API and returns the generated text.
- * @param {*} text
- * @param {*} request
- * @param {*} openai
+ * @param {string} text
+ * @param {string} request
+ * @param {string} engine
  * @returns
  */
 export default async function callGPT(
   text: string,
   request: string,
+  engine: string,
 ) {
   const res = await fetch('/api/chatgpt', {
     method: 'POST',
@@ -35,6 +36,7 @@ export default async function callGPT(
     body: JSON.stringify({
       text,
       request,
+      engine,
     }),
   });
 

@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Configuration, OpenAIApi } from 'openai';
+import { engineMap } from '@/app/common/constants';
 
 const configuration = new Configuration({
   apiKey: process.env.CHATGPT_API_KEY,
@@ -28,20 +29,42 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
-  const { text, request } = req.body;
+  const { text, request, engine } = req.body as { text: string, request: string, engine: keyof typeof engineMap };
 
-  const completion = await openai.createChatCompletion({
-    model: 'gpt-3.5-turbo',
-    messages: [
-      { role: 'system', content: generatePrompt(text, request) },
-    ],
-    temperature: 0.6,
-    max_tokens: 1400,
-  });
+  const model = engineMap[engine] || 'gpt-3.5-turbo';
 
-  const result = {
-    text: completion.data.choices[0].message?.content ?? '',
-  };
+  try {
+    if (model === 'text-davinci-003') {
+      const completion = await openai.createCompletion({
+        model: engineMap[engine] || 'gpt-3.5-turbo',
+        prompt: generatePrompt(text, request),
+        temperature: 0.6,
+        max_tokens: 1400,
+      });
 
-  res.status(200).json({ result });
+      const result = {
+        text: completion.data.choices[0].text ?? '',
+      };
+
+      res.status(200).json({ result });
+      return;
+    }
+
+    const completion = await openai.createChatCompletion({
+      model: engineMap[engine] || 'gpt-3.5-turbo',
+      messages: [
+        { role: 'system', content: generatePrompt(text, request) },
+      ],
+      temperature: 0.6,
+      max_tokens: 1400,
+    });
+
+    const result = {
+      text: completion.data.choices[0].message?.content ?? '',
+    };
+
+    res.status(200).json({ result });
+  } catch (err) {
+    res.status(200).json({ result: { text: `<Error: ${(err as Error).message}>` } })
+  }
 }
