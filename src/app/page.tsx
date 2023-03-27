@@ -136,20 +136,8 @@ export default function Home() {
         <title>FatGPT</title>
         <link rel="icon" href="/ai.png" />
       </Head>
-      <Analytics />
 
       <main className={styles.main}>
-        <h3>Fat GPT</h3>
-
-        <div className={styles.links}>
-          <a href="https://beta.openai.com/account/api-keys">
-            Get your API Key here
-          </a>
-            <a className={styles.github} href="https://github.com/Onigam/fat-chatgpt">
-            Source code on Github
-          </a>
-        </div>
-
         <form onSubmit={onSubmit}>
           <label>Model</label>
           <select
