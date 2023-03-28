@@ -7,12 +7,13 @@ import { CHUNK_SIZE } from "./chunk.constant";
   * @param {*} chunkSize
   * @returns
   */
-  export const splitStringAtParagraph = (str: string, chunkSize : number = CHUNK_SIZE) : string[] => {
+  export const splitStringAtParagraph = (str: string, chunkSize: number = CHUNK_SIZE): string[] => {
     let chunks: string[] = [];
-    let regex = new RegExp(`.{1,${chunkSize}}(?=\\s|$)`, 'g');
+    let regex = new RegExp(`[\\w\\W]{1,${chunkSize}}(?=\\s|$)`, 'gm');
     let matches = str.match(regex);
     if (matches) {
       chunks = matches;
     }
+
     return chunks;
   }

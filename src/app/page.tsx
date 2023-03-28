@@ -1,12 +1,10 @@
 'use client';
 
-import { CHUNK_SIZE, UNICODE_CHUNK_SIZE } from '@/app/common/chunk.constant';
 import { splitStringAtParagraph } from "@/app/common/chunk.helper";
 import callGPT from "@/app/common/openai";
 import translate from '@/app/common/deepl';
-import { ENGINES } from '@/app/common/constants';
+import { DEFAULT_ENGINE, engineMap, ENGINES, EngineType } from '@/app/common/constants';
 import styles from "@/app/styles/Home.module.css";
-import { Analytics } from '@vercel/analytics/react';
 import Head from "next/head";
 import { FormEvent, useEffect, useState } from 'react';
 import sequence from "./common/sequence";
@@ -20,8 +18,10 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [chunks, setChunks] = useState([] as string[]);
   const [useTranslate, setUseTranslate] = useState(false);
-  const [engine, setEngine] = useState(ENGINES[0]);
+  const [engine, setEngine] = useState(DEFAULT_ENGINE);
   let lang = '';
+
+  const chunksSize = engineMap[engine || DEFAULT_ENGINE].tokens - 1000;
 
   // This useEffect will run once when the component mounts
   // It checks if the window and local storage exist, and if so, it
@@ -36,6 +36,10 @@ export default function Home() {
     }
   }, []);
 
+  useEffect(() => {
+    let chunks = splitStringAtParagraph(textInput, chunksSize);
+    setChunks(chunks);
+  }, [textInput, chunksSize]);
 
   /**
    * This function calls the API server, which then calls the OpenAI API.
@@ -75,7 +79,7 @@ export default function Home() {
       let textChunks = chunks.slice();
       if (useTranslate) {
         const translated = await translate(textInput);
-        textChunks = splitStringAtParagraph(translated.text, CHUNK_SIZE);
+        textChunks = splitStringAtParagraph(translated.text, chunksSize);
         lang = translated.lang === 'en' ? '' : translated.lang;
         await new Promise(resolve => setTimeout(resolve, 0));
       } else {
@@ -89,6 +93,10 @@ export default function Home() {
 
         return processChunk(chunk, requestInput)
           .then(async (resRaw) => {
+            if (resRaw === null) {
+              throw new Error('Error in ChatGPT call');
+            }
+
             let res = resRaw;
             if (useTranslate && lang) {
               const translated = await translate(res, lang);
@@ -126,8 +134,6 @@ export default function Home() {
 
   const setTextAndChunks = (text: string) => {
     setTextInput(text);
-    let chunks = splitStringAtParagraph(text, useTranslate ? CHUNK_SIZE : UNICODE_CHUNK_SIZE);
-    setChunks(chunks);
   };
 
   return (
@@ -141,10 +147,11 @@ export default function Home() {
         <form onSubmit={onSubmit}>
           <label>Model</label>
           <select
-            onChange={(e) => setEngine(e.target.value)}
+            defaultValue={engine}
+            onChange={(e) => setEngine(e.target.value as EngineType)}
           >
             {ENGINES.map(eng => (
-              <option key={eng} value={eng} selected={eng === engine}>{eng}</option>
+              <option key={eng} value={eng}>{eng}</option>
             ))}
           </select>
 
@@ -170,32 +177,32 @@ export default function Home() {
           <textarea
             name="text"
             rows={10}
-            placeholder={`Enter your text here, there is no size limitation, the content will be split into ${CHUNK_SIZE} characters chunks. Each chunk will be processed separatly by openAI.`}
+            placeholder={`Enter your text here, there is no size limitation, the content will be split into ${chunksSize} characters chunks. Each chunk will be processed separatly by openAI.`}
             value={textInput}
             onChange={(e) => setTextAndChunks(e.target.value)}
           />
-          {!!textInput?.length && (<div className={styles.size}>{`${textInput.length} characters - ${Math.floor(textInput.length / CHUNK_SIZE) + 1} chunks to process`}</div>)}
-          {!processing && <input type="submit" value="Process your request" />}
-          {processing && (
+          {!!textInput?.length ? (<div className={styles.size}>{`${textInput.length} characters - ${Math.floor(textInput.length / chunksSize) + 1} chunks to process`}</div>) : null}
+          {!processing ? <input type="submit" value="Process your request" /> : null}
+          {processing ? (
             <input
               type="submit"
               value="Processing wait a few seconds..."
               disabled
             />
-          )}
-          {processing && <progress value={progress} max="100" />}
+          ) : null}
+          {processing ? <progress value={progress} max="100" /> : null}
         </form>
-        {result && (
+        {result ? (
           <div className={styles.resultContainer}>
             {result.map((item, index) => {
 
               return <>
                 <Typewriter key={`result-${index}`} text={item} />
-                {chunks.length > 1 && (<div className={styles.partLabel} key={`result-title-${index}`}>Part {index + 1}</div>)}
+                {chunks.length > 1 ? (<div className={styles.partLabel} key={`result-title-${index}`}>Part {index + 1}</div>) : null}
               </>
             })}
           </div>
-        )}
+        ) : null}
       </main>
     </div>
   );

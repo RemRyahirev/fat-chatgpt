@@ -41,10 +41,12 @@ export default async function callGPT(
   });
 
   const result: {
+    success: boolean;
     result: {
       text: string;
+      details?: Record<string, unknown>;
     };
   } = await res.json();
 
-  return result.result.text;
+  return result.success ? result.result.text : null;
 }

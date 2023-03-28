@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Configuration, OpenAIApi } from 'openai';
-import { engineMap } from '@/app/common/constants';
+import { DEFAULT_ENGINE, engineMap } from '@/app/common/constants';
+import { AxiosError } from 'axios';
 
 const configuration = new Configuration({
   apiKey: process.env.CHATGPT_API_KEY,
@@ -31,15 +32,15 @@ export default async function handler(
 ) {
   const { text, request, engine } = req.body as { text: string, request: string, engine: keyof typeof engineMap };
 
-  const model = engineMap[engine] || 'gpt-3.5-turbo';
+  const model = engineMap[engine || DEFAULT_ENGINE];
 
   try {
-    if (model === 'text-davinci-003') {
+    if (model.model === 'text-davinci-003') {
       const completion = await openai.createCompletion({
-        model: engineMap[engine] || 'gpt-3.5-turbo',
+        model: model.model,
         prompt: generatePrompt(text, request),
         temperature: 0.6,
-        max_tokens: 1400,
+        // max_tokens: 1400,
       });
 
       const result = {
@@ -51,20 +52,29 @@ export default async function handler(
     }
 
     const completion = await openai.createChatCompletion({
-      model: engineMap[engine] || 'gpt-3.5-turbo',
+      model: model.model,
       messages: [
         { role: 'system', content: generatePrompt(text, request) },
       ],
       temperature: 0.6,
-      max_tokens: 1400,
+      // max_tokens: 1400,
     });
 
     const result = {
       text: completion.data.choices[0].message?.content ?? '',
     };
 
-    res.status(200).json({ result });
+    res.status(200).json({
+      success: true,
+      result,
+    });
   } catch (err) {
-    res.status(200).json({ result: { text: `<Error: ${(err as Error).message}>` } })
+    res.status(200).json({
+      success: false,
+      result: {
+        text: `<Error: ${(err as Error).message}>`,
+        details: (err as AxiosError)?.response?.data,
+      },
+    })
   }
 }
